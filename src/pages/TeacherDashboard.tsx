@@ -21,14 +21,68 @@ import {
   AlertCircle,
   BookOpen,
   Trash2,
+  Plus,
+  X,
 } from "lucide-react";
+
+// Types
+interface Student {
+  id: number;
+  name: string;
+  marks: number;
+  scriptUrl: string;
+}
+
+interface Section {
+  [sectionName: string]: Student[];
+}
+
+interface Semester {
+  sections: Section;
+}
+
+interface Semesters {
+  [semesterName: string]: Semester;
+}
+
+// Initial data structure
+const getInitialSemesters = (): Semesters => ({
+  "Semester 1": {
+    sections: {
+      "Section A": [
+        { id: 1, name: "John Doe", marks: 85, scriptUrl: "#" },
+        { id: 2, name: "Jane Smith", marks: 92, scriptUrl: "#" },
+        { id: 3, name: "Mike Johnson", marks: 78, scriptUrl: "#" },
+        { id: 4, name: "Sarah Williams", marks: 88, scriptUrl: "#" },
+      ],
+      "Section B": [
+        { id: 5, name: "Tom Brown", marks: 76, scriptUrl: "#" },
+        { id: 6, name: "Emily Davis", marks: 91, scriptUrl: "#" },
+        { id: 7, name: "Chris Wilson", marks: 83, scriptUrl: "#" },
+      ],
+    },
+  },
+  "Semester 2": {
+    sections: {
+      "Section A": [
+        { id: 8, name: "Alex Martinez", marks: 89, scriptUrl: "#" },
+        { id: 9, name: "Lisa Anderson", marks: 94, scriptUrl: "#" },
+        { id: 10, name: "David Taylor", marks: 81, scriptUrl: "#" },
+      ],
+      "Section B": [
+        { id: 11, name: "Nina Patel", marks: 87, scriptUrl: "#" },
+        { id: 12, name: "Ryan Lee", marks: 79, scriptUrl: "#" },
+      ],
+    },
+  },
+});
 
 // Student Details Page Component
 const StudentDetailsPage = ({ 
   student, 
   onBack 
 }: { 
-  student: any;
+  student: Student;
   onBack: () => void;
 }) => {
   const [teacherComments, setTeacherComments] = useState<{ [key: number]: string }>({});
@@ -334,53 +388,86 @@ const StudentDetailsPage = ({
   );
 };
 
+// Add Semester/Section Modal Component
+const AddSemesterSectionModal = ({
+  isOpen,
+  onClose,
+  onAdd,
+  type,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onAdd: (name: string) => void;
+  type: "semester" | "section";
+}) => {
+  const [name, setName] = useState("");
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (name.trim()) {
+      onAdd(name.trim());
+      setName("");
+      onClose();
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-xl">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-xl font-bold text-slate-900">
+            Add New {type === "semester" ? "Semester" : "Section"}
+          </h3>
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-slate-600 transition-colors"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder={`Enter ${type} name...`}
+            className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 mb-4"
+            autoFocus
+          />
+          <div className="flex gap-2 justify-end">
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" className="bg-slate-900 text-white hover:bg-slate-800">
+              Add {type === "semester" ? "Semester" : "Section"}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
 // Main Teacher Dashboard Component
 const TeacherDashboard = () => {
   const [userName] = useState("Dr. Smith");
+  const [semesters, setSemesters] = useState<Semesters>(getInitialSemesters());
   const [selectedSemester, setSelectedSemester] = useState<string | null>(null);
   const [selectedSection, setSelectedSection] = useState<string | null>(null);
   const [editingStudent, setEditingStudent] = useState<number | null>(null);
   const [marks, setMarks] = useState<{ [key: number]: number }>({});
   const [isSemesterDropdownOpen, setIsSemesterDropdownOpen] = useState(false);
   const [isSectionDropdownOpen, setIsSectionDropdownOpen] = useState(false);
-  const [selectedStudent, setSelectedStudent] = useState<any>(null);
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [questionPapers, setQuestionPapers] = useState<{ [key: string]: Array<{ name: string; subject: string }> }>({});
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [modalType, setModalType] = useState<"semester" | "section">("semester");
   const studentFileInputRefs = useRef<{ [key: number]: HTMLInputElement | null }>({});
   const questionPaperInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({});
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Sample data structure
-  const semesters = {
-    "Semester 1": {
-      sections: {
-        "Section A": [
-          { id: 1, name: "John Doe", marks: 85, scriptUrl: "#" },
-          { id: 2, name: "Jane Smith", marks: 92, scriptUrl: "#" },
-          { id: 3, name: "Mike Johnson", marks: 78, scriptUrl: "#" },
-          { id: 4, name: "Sarah Williams", marks: 88, scriptUrl: "#" },
-        ],
-        "Section B": [
-          { id: 5, name: "Tom Brown", marks: 76, scriptUrl: "#" },
-          { id: 6, name: "Emily Davis", marks: 91, scriptUrl: "#" },
-          { id: 7, name: "Chris Wilson", marks: 83, scriptUrl: "#" },
-        ],
-      },
-    },
-    "Semester 2": {
-      sections: {
-        "Section A": [
-          { id: 8, name: "Alex Martinez", marks: 89, scriptUrl: "#" },
-          { id: 9, name: "Lisa Anderson", marks: 94, scriptUrl: "#" },
-          { id: 10, name: "David Taylor", marks: 81, scriptUrl: "#" },
-        ],
-        "Section B": [
-          { id: 11, name: "Nina Patel", marks: 87, scriptUrl: "#" },
-          { id: 12, name: "Ryan Lee", marks: 79, scriptUrl: "#" },
-        ],
-      },
-    },
-  };
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -429,11 +516,10 @@ const TeacherDashboard = () => {
     }
   };
 
-  const handleStudentClick = (student: any) => {
+  const handleStudentClick = (student: Student) => {
     setSelectedStudent(student);
   };
 
-  // Handle question paper upload
   const handleQuestionPaperUpload = (key: string) => {
     if (questionPaperInputRefs.current[key]) {
       questionPaperInputRefs.current[key]?.click();
@@ -466,11 +552,47 @@ const TeacherDashboard = () => {
     setQuestionPapers({ ...questionPapers, [key]: updated });
   };
 
+  const handleAddSemester = (name: string) => {
+    setSemesters({
+      ...semesters,
+      [name]: { sections: {} },
+    });
+  };
+
+  const handleAddSection = (name: string) => {
+    if (selectedSemester) {
+      setSemesters({
+        ...semesters,
+        [selectedSemester]: {
+          ...semesters[selectedSemester],
+          sections: {
+            ...semesters[selectedSemester].sections,
+            [name]: [],
+          },
+        },
+      });
+    }
+  };
+
+  const handleDeleteStudent = (studentId: number) => {
+    if (selectedSemester && selectedSection) {
+      const updatedStudents = currentStudents.filter(s => s.id !== studentId);
+      setSemesters({
+        ...semesters,
+        [selectedSemester]: {
+          ...semesters[selectedSemester],
+          sections: {
+            ...semesters[selectedSemester].sections,
+            [selectedSection]: updatedStudents,
+          },
+        },
+      });
+    }
+  };
+
   const currentStudents =
     selectedSemester && selectedSection
-      ? semesters[selectedSemester as keyof typeof semesters]?.sections[
-          selectedSection as keyof typeof semesters["Semester 1"]["sections"]
-        ] || []
+      ? semesters[selectedSemester]?.sections[selectedSection] || []
       : [];
 
   const currentKey = selectedSemester && selectedSection ? `${selectedSemester}-${selectedSection}` : "";
@@ -540,7 +662,35 @@ const TeacherDashboard = () => {
 
         {/* Semester & Section Selection */}
         <div className="mb-8">
-          <h3 className="text-xl font-bold text-slate-900 mb-4">Select Semester and Section</h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xl font-bold text-slate-900">Select Semester and Section</h3>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                className="bg-slate-900 text-white hover:bg-slate-800"
+                onClick={() => {
+                  setModalType("semester");
+                  setShowAddModal(true);
+                }}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add Semester
+              </Button>
+              {selectedSemester && (
+                <Button
+                  size="sm"
+                  className="bg-slate-900 text-white hover:bg-slate-800"
+                  onClick={() => {
+                    setModalType("section");
+                    setShowAddModal(true);
+                  }}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Section
+                </Button>
+              )}
+            </div>
+          </div>
           <div className="flex flex-wrap gap-3 items-center">
             {/* Semester Dropdown */}
             <div className="relative">
@@ -586,9 +736,7 @@ const TeacherDashboard = () => {
                 
                 {isSectionDropdownOpen && (
                   <div className="absolute top-full mt-2 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-10">
-                    {Object.keys(
-                      semesters[selectedSemester as keyof typeof semesters].sections
-                    ).map((section) => (
+                    {Object.keys(semesters[selectedSemester].sections).map((section) => (
                       <button
                         key={section}
                         onClick={() => {
@@ -733,10 +881,10 @@ const TeacherDashboard = () => {
                       return (
                         <tr
                           key={student.id}
-                          className="border-b border-slate-100 hover:bg-slate-50 transition-colors cursor-pointer"
+                          className="border-b border-slate-100 hover:bg-slate-50 transition-colors"
                         >
                           <td 
-                            className="py-4 px-4"
+                            className="py-4 px-4 cursor-pointer"
                             onClick={() => handleStudentClick(student)}
                           >
                             <div className="flex items-center gap-3">
@@ -752,7 +900,7 @@ const TeacherDashboard = () => {
                             </div>
                           </td>
                           <td 
-                            className="py-4 px-4"
+                            className="py-4 px-4 cursor-pointer"
                             onClick={() => handleStudentClick(student)}
                           >
                             {editingStudent === student.id ? (
@@ -774,7 +922,7 @@ const TeacherDashboard = () => {
                             )}
                           </td>
                           <td 
-                            className="py-4 px-4"
+                            className="py-4 px-4 cursor-pointer"
                             onClick={() => handleStudentClick(student)}
                           >
                             <span
@@ -836,17 +984,32 @@ const TeacherDashboard = () => {
                                   Save
                                 </Button>
                               ) : (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="text-slate-900 hover:bg-slate-100"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleEditMarks(student.id, student.marks);
-                                  }}
-                                >
-                                  Edit
-                                </Button>
+                                <>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-slate-900 hover:bg-slate-100"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleEditMarks(student.id, student.marks);
+                                    }}
+                                  >
+                                    Edit
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-red-600 hover:bg-red-50 hover:text-red-700"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (confirm(`Are you sure you want to delete ${student.name}?`)) {
+                                        handleDeleteStudent(student.id);
+                                      }
+                                    }}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </>
                               )}
                             </div>
                           </td>
@@ -885,6 +1048,14 @@ const TeacherDashboard = () => {
           accept=".pdf"
         />
       </main>
+
+      {/* Add Semester/Section Modal */}
+      <AddSemesterSectionModal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onAdd={modalType === "semester" ? handleAddSemester : handleAddSection}
+        type={modalType}
+      />
     </div>
   );
 };
