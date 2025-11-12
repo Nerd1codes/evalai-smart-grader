@@ -1,14 +1,12 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BookOpen, ArrowLeft } from "lucide-react";
-import { Link } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
 
 const StudentAuth = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -23,23 +21,22 @@ const StudentAuth = () => {
     const email = formData.get("email") as string;
     const password = formData.get("password") as string;
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    try {
+      // Replace this with your actual login API call
+      console.log("Logging in:", { email, password });
 
-    if (error) {
-      toast({
-        title: "Login Failed",
-        description: error.message,
-        variant: "destructive",
-      });
-    } else {
+      // Simulate success
       toast({
         title: "Welcome back!",
         description: "You've successfully logged in.",
       });
       navigate("/student/dashboard");
+    } catch (error: any) {
+      toast({
+        title: "Login Failed",
+        description: error.message || "Something went wrong. Please try again.",
+        variant: "destructive",
+      });
     }
 
     setIsLoading(false);
@@ -50,29 +47,24 @@ const StudentAuth = () => {
     setIsLoading(true);
 
     const formData = new FormData(e.currentTarget);
+    const name = formData.get("name") as string;
     const email = formData.get("email") as string;
     const password = formData.get("password") as string;
-    const name = formData.get("name") as string;
 
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { name, role: "student" },
-        emailRedirectTo: `${window.location.origin}/student/dashboard`,
-      },
-    });
+    try {
+      // Replace this with your actual signup API call
+      console.log("Signing up:", { name, email, password });
 
-    if (error) {
-      toast({
-        title: "Signup Failed",
-        description: error.message,
-        variant: "destructive",
-      });
-    } else {
+      // Simulate success
       toast({
         title: "Account Created!",
-        description: "Please check your email to verify your account.",
+        description: "You can now log in using your credentials.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Signup Failed",
+        description: error.message || "Something went wrong. Please try again.",
+        variant: "destructive",
       });
     }
 
@@ -102,6 +94,7 @@ const StudentAuth = () => {
                 <TabsTrigger value="signup">Sign Up</TabsTrigger>
               </TabsList>
 
+              {/* Login Form */}
               <TabsContent value="login">
                 <form onSubmit={handleLogin} className="space-y-4">
                   <div className="space-y-2">
@@ -129,6 +122,7 @@ const StudentAuth = () => {
                 </form>
               </TabsContent>
 
+              {/* Signup Form */}
               <TabsContent value="signup">
                 <form onSubmit={handleSignup} className="space-y-4">
                   <div className="space-y-2">
