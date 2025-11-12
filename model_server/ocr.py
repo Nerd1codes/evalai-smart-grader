@@ -9,7 +9,7 @@
 # from flask_cors import CORS
 
 # # Get API key from environment variable
-# API_KEY = "AIzaSyDrqEOOecUKrwQ1Yy-TddWTwM79wMNoPBc"
+# API_KEY = 
 # API_URL_BASE = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent"
 
 # SYSTEM_PROMPT = (
@@ -166,7 +166,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 
 # Get API key from environment variable
-API_KEY = "AIzaSyDrqEOOecUKrwQ1Yy-TddWTwM79wMNoPBc"
+API_KEY = "api"
 API_URL_BASE = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent"
 
 SYSTEM_PROMPT = (
