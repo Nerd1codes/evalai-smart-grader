@@ -1,7 +1,8 @@
-// src/utils.ts
+import { Semesters } from "./types"; // This now imports the correct type
 
-import { Semesters } from "./types";
-
+/**
+ * Provides initial mock data for the dashboard.
+ */
 export const getInitialSemesters = (): Semesters => ({
   "Semester 1": {
     sections: {
@@ -33,34 +34,55 @@ export const getInitialSemesters = (): Semesters => ({
   },
 });
 
+/**
+ * Calculates a letter grade based on marks (0-100).
+ */
 export const calculateGrade = (marks: number): string => {
   if (marks >= 90) return "A+";
   if (marks >= 80) return "A";
   if (marks >= 70) return "B";
   if (marks >= 60) return "C";
-  return "D";
+  if (marks >= 50) return "D";
+  return "F";
 };
 
+/**
+ * Returns Tailwind CSS classes for a given grade's color.
+ */
 export const getGradeColor = (grade: string): string => {
-  if (grade === "A+" || grade === "A") {
-    return "bg-green-100 text-green-800";
+  switch (grade) {
+    case "A+":
+    case "A":
+      return "bg-green-100 text-green-800";
+    case "B":
+      return "bg-blue-100 text-blue-800";
+    case "C":
+      return "bg-yellow-100 text-yellow-800";
+    case "D":
+      return "bg-orange-100 text-orange-800";
+    case "F":
+      return "bg-red-100 text-red-800";
+    default:
+      return "bg-slate-100 text-slate-800";
   }
-  if (grade === "B") {
-    return "bg-blue-100 text-blue-800";
-  }
-  if (grade === "C") {
-    return "bg-yellow-100 text-yellow-800";
-  }
-  return "bg-red-100 text-red-800";
 };
 
+/**
+ * Generates initials from a full name. (e.g., "John Doe" -> "JD")
+ */
 export const getInitials = (name: string): string => {
-  return name
-    .split(" ")
-    .map((n) => n[0])
-    .join("");
+  if (!name) return "";
+  const names = name.trim().split(" ");
+  if (names.length === 1) return names[0].charAt(0).toUpperCase();
+  return (
+    names[0].charAt(0).toUpperCase() +
+    names[names.length - 1].charAt(0).toUpperCase()
+  );
 };
 
+/**
+ * Clamps a number between 0 and 100.
+ */
 export const clampMarks = (value: number): number => {
   return Math.min(100, Math.max(0, value));
 };

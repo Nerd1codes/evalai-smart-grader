@@ -1,20 +1,35 @@
-// routes/semesterRoutes.js
 import express from "express";
-import * as ctrl from "../controller/semesterController.js";
+import {
+  getSemesters,
+  addSemester,
+  addSection,
+  addStudent,
+  updateStudentMarks,
+  deleteStudent,
+  addPaper,
+  deletePaper,
+} from "../controller/semesterController.js";
+// import { verifyToken } from "../middleware/verifyToken.js"; // Protect routes
 
 const router = express.Router();
 
-router.get("/", ctrl.getSemesters);
-router.post("/", ctrl.addSemester);
-router.delete("/:semId", ctrl.deleteSemester);
+// All routes are protected by default (uncomment verifyToken)
+// router.use(verifyToken);
 
-router.post("/:semId/sections", ctrl.addSection);
-router.delete("/:semId/sections/:sectionId", ctrl.deleteSection);
+// Semester routes
+router.get("/", getSemesters);
+router.post("/", addSemester);
 
-router.post("/:semId/sections/:sectionId/students", ctrl.addStudentToSection);
-router.delete("/:semId/sections/:sectionId/students/:studentId", ctrl.deleteStudentFromSection);
+// Section routes
+router.post("/:semId/sections", addSection);
 
-router.post("/:semId/sections/:sectionId/papers", ctrl.addPaperToSection);
-router.delete("/:semId/sections/:sectionId/papers/:paperId", ctrl.deletePaperFromSection);
+// Student routes
+router.post("/:semId/sections/:secId/students", addStudent);
+router.put("/:semId/sections/:secId/students/:studentId", updateStudentMarks);
+router.delete("/:semId/sections/:secId/students/:studentId", deleteStudent);
+
+// Paper routes
+router.post("/:semId/sections/:secId/papers", addPaper);
+router.delete("/:semId/sections/:secId/papers/:paperId", deletePaper);
 
 export default router;

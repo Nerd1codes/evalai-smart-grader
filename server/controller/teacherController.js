@@ -75,3 +75,24 @@ export const login = async (req, res) => {
     res.status(500).json({ message: error.message || "Server error" });
   }
 };
+
+export const getMe = async (req, res) => {
+  try {
+    // req.user.id is added by the verifyToken middleware
+    const teacherId = req.user.id;
+
+    const teacher = await Teacher.findById(teacherId).select("-password"); // Exclude password hash
+
+    if (!teacher) {
+      return res.status(404).json({ message: "Teacher not found" });
+    }
+
+    res.status(200).json({
+      id: teacher._id,
+      name: teacher.name,
+      email: teacher.email,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message || "Server error" });
+  }
+};
