@@ -10,7 +10,7 @@
 
 # # Get API key from environment variable
 # API_KEY = 
-# API_URL_BASE = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent"
+# API_URL_BASE = "https://generativelanguage.googleapis.com/v1beta/model/gemini-2.0-flash-exp:generateContent"
 
 # SYSTEM_PROMPT = (
 #     "You are an expert transcriber. Your task is to accurately transcribe all "
@@ -167,7 +167,7 @@ from flask_cors import CORS
 
 # Get API key from environment variable
 API_KEY = "api"
-API_URL_BASE = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent"
+API_URL_BASE = "https://generativelanguage.googleapis.com/v1beta/model/gemini-2.0-flash-exp:generateContent"
 
 SYSTEM_PROMPT = (
     "You are an expert transcriber. Your task is to accurately transcribe all "

@@ -9,6 +9,8 @@ import cookieParser from "cookie-parser";
 import dbConnect from "./config/dbConnect.js"; // ✅ import the DB connection
 import studentRoutes from "./routes/studentRoutes.js";
 import teacherRoutes from "./routes/teacherRoutes.js";
+import semesterRoutes from "./routes/semesterRoutes.js";
+
 
 dotenv.config(); // load .env
 
@@ -35,6 +37,8 @@ dbConnect(); // ✅ call DB connection function
 // Routes
 app.use("/api/students", studentRoutes);
 app.use("/api/teachers", teacherRoutes);
+app.use("/api/semesters", semesterRoutes);
+
 
 // Test route
 app.get("/", (req, res) => {
