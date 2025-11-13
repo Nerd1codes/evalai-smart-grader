@@ -1,3 +1,5 @@
+// ../controller/teacherController.js
+
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import Teacher from "../model/Teacher.js";
@@ -11,7 +13,12 @@ export const signup = async (req, res) => {
     if (existingTeacher)
       return res.status(400).json({ message: "Email already registered" });
 
-    const newTeacher = await Teacher.create({ name, email, password });
+    // Create teacher (assuming password hashing is handled by the Mongoose model)
+    const newTeacher = await Teacher.create({
+      name,
+      email,
+      password, // Sending plain password to the model
+    });
 
     res.status(201).json({
       message: "Signup successful",
@@ -38,6 +45,7 @@ export const login = async (req, res) => {
     if (!teacher)
       return res.status(400).json({ message: "Invalid email or password" });
 
+    // Compare plain-text password from req.body with hashed password from DB
     const isMatch = await bcrypt.compare(password, teacher.password);
     if (!isMatch)
       return res.status(400).json({ message: "Invalid email or password" });
@@ -48,9 +56,16 @@ export const login = async (req, res) => {
       { expiresIn: "7d" }
     );
 
+    // 🍪 SET THE TOKEN IN AN HTTP-ONLY COOKIE
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
+
     res.status(200).json({
       message: "Login successful",
-      token,
       teacher: {
         name: teacher.name,
         email: teacher.email,

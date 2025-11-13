@@ -1,7 +1,9 @@
+// ../middleware/verifyToken.js (assuming file path)
+
 import jwt from "jsonwebtoken";
 
 export const verifyToken = (req, res, next) => {
-  const token = req.cookies.token;
+  const token = req.cookies.token; // ✅ Reads the cookie set by login
   if (!token) return res.status(401).json({ message: "Access denied" });
 
   try {
