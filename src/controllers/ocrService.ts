@@ -2,32 +2,81 @@
 
 import { OCRResponse } from "../types";
 
-// Configuration - you can move this to .env
-const BACKEND_OCR_BASE = "http://127.0.0.1:5001";
+// =======================
+// CONFIGURATION
+// =======================
+// Example: Flask backend running Gemini OCR on:
+// POST http://127.0.0.1:5001/ocr
+//
+// You can move to .env → VITE_OCR_API_URL
+// =======================
+const BACKEND_OCR_BASE =
+  "http://127.0.0.1:5001";
+
 const OCR_ENDPOINT = `${BACKEND_OCR_BASE.replace(/\/$/, "")}/ocr`;
 
+// Returned shape:
+// interface OCRResponse {
+//   text: string;
+//   pages?: number;
+// }
+
 export class OCRService {
+  // --------------------------------------------------
+  // Process file normally (initial upload)
+  // --------------------------------------------------
   static async processFile(file: File): Promise<OCRResponse> {
-    const form = new FormData();
-    form.append("file", file, file.name);
+    const formData = new FormData();
+    formData.append("file", file); // Flask expects request.files["file"]
 
-    const response = await fetch(OCR_ENDPOINT, {
-      method: "POST",
-      body: form,
-    });
+    let response: Response;
 
-    if (!response.ok) {
-      const msg = await response.text().catch(() => "");
-      const hint =
-        response.status === 404
-          ? " (Hint: your Flask route should be POST /ocr — update your frontend URL or server route)"
-          : "";
-      throw new Error((msg || `OCR API failed with ${response.status}`) + hint);
+    try {
+      response = await fetch(OCR_ENDPOINT, {
+        method: "POST",
+        body: formData,
+      });
+    } catch (err) {
+      console.error("OCR network error:", err);
+      throw new Error(
+        "Could not reach OCR server. Check if your Python backend is running."
+      );
     }
 
-    return await response.json();
+    if (!response.ok) {
+      // Try extracting error from backend
+      let errorMessage = `OCR API failed with ${response.status}`;
+      try {
+        const errJson = await response.json();
+        if (errJson?.error) errorMessage = errJson.error;
+      } catch {
+        // ignore JSON parse errors
+      }
+
+      // Helpful hint for 404 routing problems
+      if (response.status === 404) {
+        errorMessage +=
+          " (Tip: Your Flask backend must have a POST /ocr route. Check backend URL.)";
+      }
+
+      throw new Error(errorMessage);
+    }
+
+    // Successful → normal response
+    const data = await response.json();
+
+    return {
+      text: data?.text ?? "",
+      pages:
+        typeof data?.pages === "number" && !Number.isNaN(data.pages)
+          ? data.pages
+          : undefined,
+    };
   }
 
+  // --------------------------------------------------
+  // Retry OCR → same API call
+  // --------------------------------------------------
   static async retryOCR(file: File): Promise<OCRResponse> {
     return this.processFile(file);
   }

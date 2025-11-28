@@ -1,76 +1,4 @@
-// // src/controllers/apiService.ts
-// // const API_BASE = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
-// const API_BASE =  "http://localhost:5000/api";
-
-
-// function handleJSON(res: Response) {
-//   if (!res.ok) return res.json().then((e) => Promise.reject(e));
-//   return res.json();
-// }
-
-// export const api = {
-//   // Semesters
-//   getSemesters: () => fetch(`${API_BASE}/semesters`, { credentials: "include" }).then(handleJSON),
-//   addSemester: (name: string) =>
-//     fetch(`${API_BASE}/semesters`, {
-//       method: "POST",
-//       headers: { "Content-Type": "application/json" },
-//       credentials: "include",
-//       body: JSON.stringify({ name }),
-//     }).then(handleJSON),
-//   deleteSemester: (semId: string) =>
-//     fetch(`${API_BASE}/semesters/${semId}`, {
-//       method: "DELETE",
-//       credentials: "include",
-//     }).then(handleJSON),
-
-//   // Sections
-//   addSection: (semId: string, name: string) =>
-//     fetch(`${API_BASE}/semesters/${semId}/sections`, {
-//       method: "POST",
-//       headers: { "Content-Type": "application/json" },
-//       credentials: "include",
-//       body: JSON.stringify({ name }),
-//     }).then(handleJSON),
-//   deleteSection: (semId: string, sectionId: string) =>
-//     fetch(`${API_BASE}/semesters/${semId}/sections/${sectionId}`, {
-//       method: "DELETE",
-//       credentials: "include",
-//     }).then(handleJSON),
-
-//   // Students
-//   addStudent: (semId: string, sectionId: string, payload: any) =>
-//     fetch(`${API_BASE}/semesters/${semId}/sections/${sectionId}/students`, {
-//       method: "POST",
-//       headers: { "Content-Type": "application/json" },
-//       credentials: "include",
-//       body: JSON.stringify(payload),
-//     }).then(handleJSON),
-//   deleteStudent: (semId: string, sectionId: string, studentId: string) =>
-//     fetch(`${API_BASE}/semesters/${semId}/sections/${sectionId}/students/${studentId}`, {
-//       method: "DELETE",
-//       credentials: "include",
-//     }).then(handleJSON),
-
-//   // Papers
-//   addPaper: (semId: string, sectionId: string, payload: any) =>
-//     fetch(`${API_BASE}/semesters/${semId}/sections/${sectionId}/papers`, {
-//       method: "POST",
-//       headers: { "Content-Type": "application/json" },
-//       credentials: "include",
-//       body: JSON.stringify(payload),
-//     }).then(handleJSON),
-//   deletePaper: (semId: string, sectionId: string, paperId: string) =>
-//     fetch(`${API_BASE}/semesters/${semId}/sections/${sectionId}/papers/${paperId}`, {
-//       method: "DELETE",
-//       credentials: "include",
-//     }).then(handleJSON),
-// };
-
-
-
-
-import { Semesters, UploadedPaper } from "@/types";
+import { UploadedPaper, Question } from "@/types"; // Make sure Question and UploadedPaper are imported
 
 const API_BASE = "http://localhost:5000/api"; // Your backend URL
 
@@ -80,6 +8,7 @@ const API_BASE = "http://localhost:5000/api"; // Your backend URL
 const handleResponse = async (response: Response) => {
   const data = await response.json();
   if (!response.ok) {
+    // Include the server's message in the error
     throw new Error(data.message || "API request failed");
   }
   return data;
@@ -89,7 +18,6 @@ const handleResponse = async (response: Response) => {
  * Main API service object
  */
 export const api = {
-
   getTeacherProfile: async (): Promise<{ id: string; name: string; email: string }> => {
     return handleResponse(
       await fetch(`${API_BASE}/teachers/me`, {
@@ -98,9 +26,9 @@ export const api = {
       })
     );
   },
+
   /**
    * Fetches all semesters, sections, and students.
-   * Your dashboard's `transformServerToFrontend` will handle this.
    */
   getSemesters: async (): Promise<any[]> => {
     return handleResponse(
@@ -137,7 +65,7 @@ export const api = {
   },
 
   /**
-   * ✅ ADDED: Adds a new student to a section.
+   * Adds a new student to a section.
    */
   addStudent: async (
     semId: string,
@@ -155,7 +83,7 @@ export const api = {
   },
 
   /**
-   * ✅ ADDED: Updates a student's marks.
+   * Updates a student's marks.
    */
   updateStudentMarks: async (
     semId: string,
@@ -195,8 +123,57 @@ export const api = {
     );
   },
 
+  // 🎯 STEP 1: NEW FUNCTION TO CREATE THE EXAM RECORD
+  createExam: async (examData: {
+    semesterId: string;
+    sectionId: string;
+    subject: string;
+    rawQuestionPaperText: string;
+  }): Promise<{ examId: string; rawQuestionPaperText: string }> => {
+    return handleResponse(
+      await fetch(`${API_BASE}/exams/create`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(examData),
+      })
+    );
+  },
+
+  // 🎯 STEP 2 (original): save structured questions
+  saveStructuredQuestions: async (
+    examId: string,
+    questions: Question[]
+  ): Promise<{ questions: Question[] }> => {
+    return handleResponse(
+      await fetch(`${API_BASE}/exams/${examId}/questions`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ questions }),
+      })
+    );
+  },
+
+  // 🎯 STEP 2 (alias used by TeacherDashboard): saveExamQuestions
+  // This wraps the same endpoint as saveStructuredQuestions.
+  saveExamQuestions: async (
+    examId: string,
+    questions: { number: number; text: string }[]
+  ): Promise<{ questions: Question[] }> => {
+    // If your Question type has more fields (like maxMarks), you can map/extend here later.
+    return handleResponse(
+      await fetch(`${API_BASE}/exams/${examId}/questions`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ questions }),
+      })
+    );
+  },
+
   /**
-   * Adds a paper to a section.
+   * Adds a paper to a section. (Keep this for now, but your `createExam` replaces its core functionality)
    */
   addPaper: async (
     semId: string,

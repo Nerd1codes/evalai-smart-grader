@@ -1,58 +1,4 @@
-// // server.js
-
-// import express from "express";
-// import dotenv from "dotenv";
-// import cors from "cors";
-// import helmet from "helmet";
-// import morgan from "morgan";
-// import cookieParser from "cookie-parser";
-// import dbConnect from "./config/dbConnect.js"; // ✅ import the DB connection
-// import studentRoutes from "./routes/studentRoutes.js";
-// import teacherRoutes from "./routes/teacherRoutes.js";
-// import semesterRoutes from "./routes/semesterRoutes.js";
-
-
-// dotenv.config(); // load .env
-
-// const app = express();
-
-// // Middleware
-// app.use(express.json());
-// app.use(express.urlencoded({ extended: true }));
-// app.use(
-//   cors({
-//     origin: ["http://localhost:8080"], // your frontend
-//     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-//     allowedHeaders: ["Content-Type", "Authorization"],
-//     credentials: true,
-//   })
-// );
-// app.use(helmet());
-// app.use(morgan("dev"));
-// app.use(cookieParser());
-
-// // Connect Database
-// dbConnect(); // ✅ call DB connection function
-
-// // Routes
-// app.use("/api/students", studentRoutes);
-// app.use("/api/teachers", teacherRoutes);
-// app.use("/api/semesters", semesterRoutes);
-
-
-// // Test route
-// app.get("/", (req, res) => {
-//   res.send("🚀 Server is running and DB is connected!");
-// });
-
-// // Start Server
-// const PORT = process.env.PORT || 5000;
-// app.listen(PORT, () => console.log(`🔥 Server running on port ${PORT}`));
-
-
-
-
-// server.js
+// server.js (Updated)
 
 import express from "express";
 import dotenv from "dotenv";
@@ -60,13 +6,13 @@ import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
 import cookieParser from "cookie-parser";
-import dbConnect from "./config/dbConnect.js"; // ✅ import the DB connection
+import dbConnect from "./config/dbConnect.js"; 
 import studentRoutes from "./routes/studentRoutes.js";
 import teacherRoutes from "./routes/teacherRoutes.js";
 import semesterRoutes from "./routes/semesterRoutes.js";
+import examRoutes from "./routes/examRoutes.js"; // 🎯 IMPORT THE NEW ROUTE FILE
 
-dotenv.config(); // load .env
-
+dotenv.config(); 
 const app = express();
 
 // Middleware
@@ -77,20 +23,22 @@ app.use(
     origin: ["http://localhost:8080"], // your frontend
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true, // ✅ Allows cookies to be sent/received
+    credentials: true,
   })
 );
 app.use(helmet());
 app.use(morgan("dev"));
-app.use(cookieParser()); // ✅ Parses cookies, making req.cookies available
+app.use(cookieParser());
 
 // Connect Database
-dbConnect(); // ✅ call DB connection function
+dbConnect(); 
 
 // Routes
 app.use("/api/students", studentRoutes);
 app.use("/api/teachers", teacherRoutes);
 app.use("/api/semesters", semesterRoutes);
+app.use("/api/exams", examRoutes); // 🎯 USE THE NEW EXAM ROUTE HERE
+
 
 // Test route
 app.get("/", (req, res) => {
