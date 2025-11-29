@@ -310,16 +310,79 @@ const TeacherDashboard: React.FC = () => {
   };
 
   // ---------- Student click / upload ----------
-    const handleStudentClick = (student: Student) => {
+  const handleStudentClick = (student: Student) => {
     // Keep existing behavior: open the student details page
     setSelectedStudent(student);
   };
 
   const handleStudentScriptUpload = (studentId: string) => {
-    // This is usually wired to open the hidden <input type="file"> in StudentsTable.
-    // We keep it as a log; actual file selection happens in handleStudentFileSelect.
     console.log(`📂 Upload triggered for studentId=${studentId}`);
   };
+
+  /**
+   * Helper: find an "active" examId for the currently selected
+   * semester + section, based on uploaded question papers.
+   * For now, we just pick the first paper that has an examId.
+   */
+  const getActiveExamIdForCurrentSection = (): string | null => {
+    if (!selectedSemester || !selectedSection) return null;
+
+    const key = `${selectedSemester}-${selectedSection}`;
+    const papers = questionPapers[key] || [];
+
+    const examPaper = papers.find((p) => p.examId);
+    return examPaper?.examId ?? null;
+  };
+
+  // 🔥 NEW: call backend AI evaluation after answers are saved
+  const evaluateStudentWithAI = async (
+  examId: string,
+  studentId: string,
+  studentName: string
+) => {
+  try {
+    console.log(
+      `🤖 Triggering AI evaluation for ${studentName} (studentId=${studentId}) in examId=${examId}`
+    );
+
+    const data = await api.evaluateStudentAnswers(examId, studentId);
+    console.log("🤖 AI evaluation response:", data);
+
+    const evaluatedCount = Array.isArray(data?.results)
+      ? data.results.length
+      : data?.evaluatedCount ?? 0;
+
+    if (typeof data?.totalScore === "number" && selectedSemester && selectedSection) {
+      setSemesters((prev) => {
+        const sem = prev[selectedSemester];
+        if (!sem) return prev;
+        const secStudents = sem.sections[selectedSection] || [];
+        const updatedStudents = secStudents.map((s) =>
+          s.id === studentId ? { ...s, marks: data.totalScore } : s
+        );
+        return {
+          ...prev,
+          [selectedSemester]: {
+            ...sem,
+            sections: {
+              ...sem.sections,
+              [selectedSection]: updatedStudents,
+            },
+          },
+        };
+      });
+    }
+
+    alert(
+      `AI evaluation completed for ${studentName}. Evaluated ${evaluatedCount} answer(s).`
+    );
+  } catch (err: any) {
+    console.error("❌ AI evaluation failed:", err);
+    alert(err?.message || "AI evaluation failed. Please check the evaluation service.");
+  }
+};
+
+
 
   const handleStudentFileSelect = async (
     event: React.ChangeEvent<HTMLInputElement>,
@@ -331,21 +394,20 @@ const TeacherDashboard: React.FC = () => {
 
     const selectedFile = files[0];
 
-    // Immediately reset the file input so the same file can be re-selected if needed
+    // Reset input so the same file can be chosen again
     event.target.value = "";
 
-    // Ensure context is selected
     if (!selectedSemester || !selectedSection) {
       alert("Please select a semester and section before uploading student scripts.");
       return;
     }
 
-    // Find which exam this script should belong to
+    // 1️⃣ Resolve examId for this semester+section
     const examId = getActiveExamIdForCurrentSection();
     if (!examId) {
       alert(
         "No exam found for this semester/section.\n" +
-        "Upload and process the question paper first so an exam is created."
+          "Upload and process the question paper first so an exam is created."
       );
       return;
     }
@@ -357,53 +419,127 @@ const TeacherDashboard: React.FC = () => {
     console.log("🧩 Linking to examId:", examId);
 
     try {
-      // 1️⃣ Send script to OCR (Python server) – same OCRService as question paper
+      // 2️⃣ OCR the student script
       const ocrResult = await OCRService.processFile(selectedFile);
       const answerText = ocrResult?.text || "";
 
-      // 2️⃣ For now, just log the extracted text + mapping info
       console.log("📝 Extracted answer text:", answerText);
-      console.log("🔗 Mapping payload candidate:", {
-        examId,
-        studentId,
-        studentName,
-        // Later: we’ll break this into per-question answers
-        rawAnswerText: answerText,
-      });
 
-      // 3️⃣ NEXT STEP (coming later):
-      // Here we will:
-      //   - Show a modal with exam questions
-      //   - Let the teacher map each question to part of this answerText
-      //   - Call POST /api/exams/:examId/students/:studentId/answers
-      // For now we stop at logging so you can verify OCR + IDs are correct.
+      // 3️⃣ Fetch exam to get questions
+      const examRes = await api.getExamById(examId);
+      const exam = examRes.exam;
+      const questions = exam?.questions || [];
 
+      if (!questions.length) {
+        alert("This exam has no questions saved yet. Cannot map answers.");
+        return;
+      }
+
+      // 4️⃣ Split OCR text into per-question answers by numbers (31., 32., 33., ...)
+      const extractedAnswers = extractAnswersFromRawText(answerText);
+      console.log("🧩 Extracted answer segments:", extractedAnswers);
+
+      // 5️⃣ Map each segment to the matching question by questionNumber
+      const answersPayload: { questionId: string; answerText: string }[] = [];
+
+      for (const seg of extractedAnswers) {
+        const matchingQuestion = questions.find(
+          (q: any) => q.questionNumber === seg.number
+        );
+
+        if (!matchingQuestion) {
+          console.warn(
+            `⚠ No matching question found in exam for questionNumber=${seg.number}. Skipping.`
+          );
+          continue;
+        }
+
+        answersPayload.push({
+          questionId: matchingQuestion._id,
+          answerText: seg.text,
+        });
+      }
+
+      if (answersPayload.length === 0) {
+        alert(
+          "Could not match any answer segments to questions.\n" +
+            "Check the numbering format in the student script (e.g., '31.', '32.')."
+        );
+        return;
+      }
+
+      console.log("🎯 Final answers payload to save:", answersPayload);
+
+      // 6️⃣ Save ALL mapped answers in one go
+      const saveRes = await api.saveStudentAnswers(examId, studentId, answersPayload);
+      console.log("✅ Saved student answer(s):", saveRes);
+      alert(
+        `Saved ${answersPayload.length} answers for ${studentName}. Check your 'answers' collection.`
+      );
+
+      // 7️⃣ 🔥 Immediately trigger AI evaluation for this student's answers
+      await evaluateStudentWithAI(examId, studentId, studentName);
     } catch (err: any) {
-      console.error("❌ OCR error while processing student script:", err);
+      console.error("❌ Error while processing/saving student script:", err);
       alert(
         err?.message ||
-          "Failed to OCR the student script. Please check the OCR server and try again."
+          "Failed to OCR or save the student script. Please check backend/OCR server."
       );
     }
   };
 
-
-    /**
-   * Helper: find an "active" examId for the currently selected
-   * semester + section, based on uploaded question papers.
-   * For now, we just pick the first paper that has an examId.
+  /**
+   * Split the student's OCR answer text into per-question chunks.
+   * Assumes answers are labeled like:
+   *  31. ...
+   *  32. ...
+   *  33. ...
    */
-  const getActiveExamIdForCurrentSection = (): string | null => {
-    if (!selectedSemester || !selectedSection) return null;
+  function extractAnswersFromRawText(rawText: string): {
+    number: number;
+    text: string;
+  }[] {
+    if (!rawText) return [];
 
-    const key = `${selectedSemester}-${selectedSection}`;
-    const papers = questionPapers[key] || [];
+    const text = rawText.replace(/\r\n/g, "\n");
+    const pattern = /^\s*(?:\|\s*)?(\d+)\s*\.\s/gm;
 
-    // Naive choice: first paper with an examId
-    const examPaper = papers.find((p) => p.examId);
-    return examPaper?.examId ?? null;
-  };
+    const results: { number: number; text: string }[] = [];
+    let lastIndex = 0;
+    let currentQuestionNumber: number | null = null;
+    let match: RegExpExecArray | null;
 
+    while ((match = pattern.exec(text)) !== null) {
+      const matchIndex = match.index;
+      const qNumStr = match[1];
+      const qNum = parseInt(qNumStr, 10);
+
+      if (currentQuestionNumber !== null) {
+        const chunk = text.substring(lastIndex, matchIndex).trim();
+        if (chunk.length > 0) {
+          results.push({
+            number: currentQuestionNumber,
+            text: chunk,
+          });
+        }
+      }
+
+      currentQuestionNumber = qNum;
+      lastIndex = pattern.lastIndex;
+    }
+
+    if (currentQuestionNumber !== null && lastIndex < text.length) {
+      const chunk = text.substring(lastIndex).trim();
+      if (chunk.length > 0) {
+        results.push({
+          number: currentQuestionNumber,
+          text: chunk,
+        });
+      }
+    }
+
+    return results;
+  }
 
   // ---------- Question Paper helpers ----------
   const updatePaperAt = (
@@ -421,51 +557,81 @@ const TeacherDashboard: React.FC = () => {
   /**
    * STEP 2 HELPER:
    * Very simple question extractor from raw OCR text.
-   * Looks for lines starting with patterns like:
-   *   Q1, Q1), 1., 1)
-   * You can improve this later or move it to backend.
    */
-  const extractQuestionsFromRawText = (rawText: string) => {
-    const lines = rawText.split("\n").map((l) => l.trim()).filter(Boolean);
+  function extractQuestionsFromRawText(rawText: string): {
+    number: number;
+    text: string;
+    maxMarks: number;
+  }[] {
+    if (!rawText) return [];
 
-    const questions: { number: number; text: string }[] = [];
-    let currentQ: { number: number; text: string } | null = null;
+    const text = rawText.replace(/\r\n/g, "\n");
+    const pattern = /^(\d+)\s+/gm;
 
-    const questionStartRegex = /^(?:Q\s*|Q\.?\s*|Question\s*)?(\d+)[\).\s:-]/i;
+    const results: { number: number; text: string; maxMarks: number }[] = [];
+    let lastIndex = 0;
+    let currentQuestionNumber: number | null = null;
+    let match: RegExpExecArray | null;
 
-    for (const line of lines) {
-      const match = line.match(questionStartRegex);
-      if (match) {
-        // Start of a new question
-        const qNum = parseInt(match[1], 10);
-        // Push previous question if exists
-        if (currentQ) {
-          currentQ.text = currentQ.text.trim();
-          if (currentQ.text.length > 0) {
-            questions.push(currentQ);
-          }
+    const getMaxMarksFromSegment = (segment: string): number => {
+      let maxVal: number | null = null;
+
+      const marksRegex = /(\d+(?:\.\d+)?)\s*marks?/gi;
+      let m: RegExpExecArray | null;
+      while ((m = marksRegex.exec(segment)) !== null) {
+        maxVal = parseFloat(m[1]);
+      }
+
+      if (maxVal === null) {
+        const lineNumberRegex = /^(\d+(?:\.\d+)?)\s*$/gm;
+        while ((m = lineNumberRegex.exec(segment)) !== null) {
+          maxVal = parseFloat(m[1]);
         }
-        // Start new one
-        currentQ = {
-          number: qNum,
-          text: line, // include the whole line for now
-        };
-      } else if (currentQ) {
-        // Continuation of current question
-        currentQ.text += "\n" + line;
+      }
+
+      return maxVal ?? 0;
+    };
+
+    while ((match = pattern.exec(text)) !== null) {
+      const matchIndex = match.index;
+      const qNumStr = match[1];
+      const qNum = parseInt(qNumStr, 10);
+
+      if (currentQuestionNumber !== null) {
+        const segment = text.substring(lastIndex, matchIndex).trim();
+        if (segment.length > 0) {
+          const cleaned = segment.trim();
+          const maxMarks = getMaxMarksFromSegment(cleaned);
+
+          results.push({
+            number: currentQuestionNumber,
+            text: cleaned,
+            maxMarks,
+          });
+        }
+      }
+
+      currentQuestionNumber = qNum;
+      lastIndex = pattern.lastIndex;
+    }
+
+    if (currentQuestionNumber !== null && lastIndex < text.length) {
+      const segment = text.substring(lastIndex).trim();
+      if (segment.length > 0) {
+        const cleaned = segment.trim();
+        const maxMarks = getMaxMarksFromSegment(cleaned);
+
+        results.push({
+          number: currentQuestionNumber,
+          text: cleaned,
+          maxMarks,
+        });
       }
     }
 
-    // Push last question
-    if (currentQ && currentQ.text.trim().length > 0) {
-      questions.push({
-        number: currentQ.number,
-        text: currentQ.text.trim(),
-      });
-    }
-
-    return questions;
-  };
+    console.log("📚 [DEBUG] extractQuestionsFromRawText →", results);
+    return results;
+  }
 
   // ---------- Question Paper upload (STEP 1 + STEP 2) ----------
   const handleQuestionPaperUpload = async (
@@ -489,7 +655,7 @@ const TeacherDashboard: React.FC = () => {
       name: fileName,
       subject,
       ocrStatus: "processing",
-      examId: undefined, // start without an ID
+      examId: undefined,
     };
 
     setQuestionPapers((prev) => ({
@@ -499,17 +665,14 @@ const TeacherDashboard: React.FC = () => {
 
     const idx = questionPapers[currentKey]?.length || 0;
 
-    // Exam ID placeholder
     let createdExamId: string | null = null;
 
     try {
-      // 1. OCR call to Python server
       const ocrData = await OCRService.processFile(selectedFile);
       const rawText = ocrData?.text || "";
 
       console.log("📝 OCR Extracted Text:", rawText);
 
-      // 2. Find semester/section IDs
       const mapping = await findServerSemAndSection(
         selectedSemester as string,
         selectedSection as string
@@ -518,7 +681,6 @@ const TeacherDashboard: React.FC = () => {
         throw new Error("Semester or Section IDs not found for Exam creation.");
       }
 
-      // 3. Create Exam in backend (STEP 1 – you already planned this)
       const createExamResponse = await api.createExam({
         semesterId: mapping.sem._id,
         sectionId: mapping.sec._id,
@@ -528,17 +690,13 @@ const TeacherDashboard: React.FC = () => {
 
       createdExamId = createExamResponse.examId;
 
-      // 4. STEP 2: Extract questions from OCR text & send to backend
       const extractedQuestions = extractQuestionsFromRawText(rawText);
       console.log("📚 Extracted Questions:", extractedQuestions);
 
       if (createdExamId && extractedQuestions.length > 0) {
-        // Assumes you add this in apiService.ts:
-        // saveExamQuestions(examId: string, questions: { number: number; text: string }[])
         await api.saveExamQuestions(createdExamId, extractedQuestions);
       }
 
-      // 5. Update frontend state with OCR + Exam ID
       updatePaperAt(currentKey, idx, {
         ocrStatus: "done",
         ocrText: rawText,
@@ -547,13 +705,11 @@ const TeacherDashboard: React.FC = () => {
         examId: createdExamId || undefined,
       });
 
-      // 6. Update modal data (can show raw text for now; later you can show question list)
       setOcrModalData({
         subject,
         filename: fileName,
         text: rawText,
         pages: typeof ocrData?.pages === "number" ? ocrData.pages : undefined,
-        // optionally include examId in OCRModalData type later
       });
       setOcrModalOpen(true);
     } catch (err: any) {
@@ -716,9 +872,11 @@ const TeacherDashboard: React.FC = () => {
 
   // ---------- Render ----------
   if (selectedStudent) {
+    const activeExamId = getActiveExamIdForCurrentSection();
     return (
       <StudentDetailsPage
         student={selectedStudent}
+        examId={activeExamId}
         onBack={() => setSelectedStudent(null)}
       />
     );

@@ -6,7 +6,7 @@ const mongoose = require('mongoose');
 const QuestionSchema = new mongoose.Schema({
     // MongoDB generates an _id for this sub-document, which will serve as the questionId
     questionNumber: {
-        type: Number, // e.g., "Q1", "Q2a"
+        type: Number, // e.g., 1, 2, 2.1 (Note: the original comment said "Q1", "Q2a", which is inconsistent with 'type: Number'. I've kept 'type: Number' as specified in your schema.)
         required: true,
         trim: true
     },

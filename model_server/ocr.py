@@ -263,7 +263,7 @@ API_URL_BASE = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2
 
 SYSTEM_PROMPT = (
     "You are an expert transcriber. Your task is to accurately transcribe all "
-    "handwritten cursive text present in the provided image. Preserve all formatting, "
+    "handwritten cursive and printed text present in the provided image. Preserve all formatting, "
     "including line breaks, paragraph structure, and punctuation. The text must be "
     "returned exactly as read."
 )
