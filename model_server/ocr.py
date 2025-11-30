@@ -12,7 +12,7 @@ load_dotenv()  # Load environment variables from .env file
 # ==========================
 # CONFIGURATION
 # ==========================
-API_KEY = "AIzaSyANeW4CA2joxvygM93hg4qGx6fEi-agTPg"
+API_KEY = "api"
 API_URL_BASE = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent"
 
 SYSTEM_PROMPT = (
