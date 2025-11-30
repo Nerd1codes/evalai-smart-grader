@@ -2,39 +2,47 @@ import os
 import pickle
 import numpy as np
 from typing import List, Dict, Any
-from sentence_transformers import SentenceTransformer
 import requests
+import json
+import re
+from sentence_transformers import SentenceTransformer
 
-# config.py must define:
-#   MISTRAL_SERVER_URL = "http://<zerotier-ip-of-work-pc>:8000/grade"
-#   MISTRAL_API_TOKEN  = "<same as API_TOKEN in server.py>"
-from config import MISTRAL_SERVER_URL, MISTRAL_API_TOKEN
+# ---------------------------------------------------------------------
+# CONFIG
+# ---------------------------------------------------------------------
 
-# ============================================================
-# 1. Load index safely at startup
-# ============================================================
+# Work PC Mistral grading FastAPI URL
+# Make sure the port (8100) matches your uvicorn command there.
+MISTRAL_SERVER_URL = os.getenv(
+    "MISTRAL_SERVER_URL",
+    "http://192.168.195.100:8100/grade",
+)
+
+# Must match the x-api-token expected by the Mistral grading server
+MISTRAL_API_TOKEN = os.getenv("MISTRAL_API_TOKEN", "supersecret123")
 
 INDEX_PATH = os.path.join(os.path.dirname(__file__), "all_pdfs_chunks (1).pkl")
+
+# ---------------------------------------------------------------------
+# LOAD INDEX
+# ---------------------------------------------------------------------
 
 try:
     with open(INDEX_PATH, "rb") as f:
         index_data = pickle.load(f)
 except FileNotFoundError:
     print(f"[model.py] Error: Index file not found at {INDEX_PATH}")
-    raise SystemExit(1)
+    raise
 except Exception as e:
     print(f"[model.py] Error loading pickle file: {e}")
-    raise SystemExit(1)
+    raise
 
 print("[model.py] Loaded index_data type:", type(index_data))
 
 embeddings = None
 texts: List[str] = []
 
-# ---------- Detect data format ----------
-
 if isinstance(index_data, dict):
-    # Case 1: direct dict {"embeddings": ..., "texts": ...}
     print("[model.py] index_data is dict with keys:", list(index_data.keys()))
     if "embeddings" in index_data and "texts" in index_data:
         embeddings = index_data["embeddings"]
@@ -45,7 +53,6 @@ if isinstance(index_data, dict):
         )
 
 elif isinstance(index_data, (list, tuple)):
-    # Case 2: list/tuple – several possible layouts
     print("[model.py] index_data is", type(index_data), "of length", len(index_data))
 
     if len(index_data) == 0:
@@ -55,7 +62,6 @@ elif isinstance(index_data, (list, tuple)):
     print("[model.py] First element type:", type(first))
 
     if isinstance(first, dict) and "embedding" in first and "text" in first:
-        # 2a: list of dicts with 'embedding' and 'text'
         print("[model.py] Detected format: list of {'embedding', 'text'} dicts")
         embeddings_list = []
         texts_list = []
@@ -66,7 +72,6 @@ elif isinstance(index_data, (list, tuple)):
         texts = texts_list
 
     elif isinstance(first, (list, tuple)) and len(first) == 2:
-        # 2b: list of (embedding, text) pairs
         print("[model.py] Detected format: list of (embedding, text) pairs")
         embeddings_list = []
         texts_list = []
@@ -77,31 +82,28 @@ elif isinstance(index_data, (list, tuple)):
         texts = texts_list
 
     elif isinstance(first, str):
-        # 2c: list of plain text chunks
         print("[model.py] Detected format: list of text chunks only. Will compute embeddings at startup.")
         texts = list(index_data)
-        embeddings = None  # will be computed after we load the SentenceTransformer
+        embeddings = None  # will encode below
 
     else:
         raise TypeError(
             "index_data is a list/tuple but not in a recognized format. "
-            "Expected one of:\n"
-            " - list of {'embedding', 'text'} dicts,\n"
-            " - list of (embedding, text) pairs,\n"
-            " - list of text strings, or\n"
-            " - dict with 'embeddings' and 'texts' keys."
+            "Expected list of {'embedding','text'} dicts, "
+            "list of (embedding,text) pairs, or list of text strings."
         )
 
 else:
     raise TypeError(
-        f"Unsupported index_data type: {type(index_data)}. Expected dict or list/tuple."
+        f"Unsupported index_data type: {type(index_data)}. "
+        "Expected dict or list/tuple."
     )
 
 print(f"[model.py] texts length: {len(texts)}")
 
-# ============================================================
-# 2. Load embedding model & compute embeddings if needed
-# ============================================================
+# ---------------------------------------------------------------------
+# LOAD EMBEDDING MODEL & CREATE EMBEDDINGS
+# ---------------------------------------------------------------------
 
 print("[model.py] Loading SentenceTransformer model...")
 embedder = SentenceTransformer("all-mpnet-base-v2")
@@ -110,36 +112,30 @@ if embeddings is None:
     print("[model.py] No precomputed embeddings found. Encoding texts now...")
     if not texts:
         raise ValueError("Cannot encode empty 'texts' list.")
-
     embeddings = embedder.encode(
-        texts,
-        convert_to_numpy=True,
-        batch_size=32,
-        show_progress_bar=True,
+        texts, convert_to_numpy=True, batch_size=32, show_progress_bar=True
     )
 else:
     embeddings = np.array(embeddings)
 
 print("[model.py] embeddings ndim:", embeddings.ndim, "shape:", embeddings.shape)
-
 if embeddings.ndim != 2:
     raise ValueError(f"Expected embeddings to be 2D, got shape {embeddings.shape}")
 
 print("[model.py] ✅ Loaded embeddings and texts successfully.")
+print("[model.py] Using MISTRAL_SERVER_URL:", MISTRAL_SERVER_URL)
 
-# ============================================================
-# 3. Retrieval: find most similar chunks
-# ============================================================
+# ---------------------------------------------------------------------
+# RAG: FIND MOST SIMILAR CHUNKS
+# ---------------------------------------------------------------------
 
-def find_most_similar_chunks(query_text: str, top_k: int = 3) -> List[Dict[str, Any]]:
-    """
-    Encodes the query and finds the top_k most similar chunks from the loaded index.
-    """
+def find_most_similar_chunks(query_text: str, top_k: int = 3):
+    """Return the top_k most similar chunks from the index."""
     query_embedding = embedder.encode(query_text, convert_to_numpy=True)
     similarities = np.dot(query_embedding, embeddings.T)
     top_k_indices = np.argsort(similarities)[::-1][:top_k]
 
-    results: List[Dict[str, Any]] = []
+    results = []
     for i in top_k_indices:
         results.append(
             {
@@ -147,38 +143,58 @@ def find_most_similar_chunks(query_text: str, top_k: int = 3) -> List[Dict[str, 
                 "similarity": float(similarities[i]),
             }
         )
-
     return results
 
-# ============================================================
-# 4. Call remote Mistral grading server (WORK PC on port 8000)
-# ============================================================
+# ---------------------------------------------------------------------
+# Helper: extract {"marks_awarded", "feedback"} from big response string
+# ---------------------------------------------------------------------
 
-def get_mistral_response(
+def extract_json_block_from_response_text(text: str) -> Dict[str, Any]:
+    """
+    Your Mistral server returns:
+      {"response": " ... prompt ... {\"marks_awarded\": 2.5, \"feedback\": \"...\"}"}
+
+    This tries to find the LAST JSON object in that string that has
+    'marks_awarded' and 'feedback'.
+    """
+    # 1) quick attempt: maybe whole text is JSON
+    try:
+        obj = json.loads(text)
+        if isinstance(obj, dict) and "marks_awarded" in obj and "feedback" in obj:
+            return obj
+    except Exception:
+        pass
+
+    # 2) regex-find all {...} blocks
+    matches = re.findall(r"\{.*?\}", text, flags=re.DOTALL)
+    for candidate in reversed(matches):  # check from end; last one is usually the answer
+        candidate_clean = candidate.replace("\n", " ").replace("\r", " ").strip()
+        try:
+            obj = json.loads(candidate_clean)
+            if isinstance(obj, dict) and "marks_awarded" in obj and "feedback" in obj:
+                return obj
+        except Exception:
+            continue
+
+    # 3) fallback: we couldn't parse; return text as feedback
+    return {"marks_awarded": None, "feedback": text.strip()}
+
+# ---------------------------------------------------------------------
+# CALL MISTRAL GRADING SERVER (WORK PC)
+# ---------------------------------------------------------------------
+
+def call_mistral_grader(
     question: str,
     student_answer: str,
     context: str,
     max_marks: float,
 ) -> Dict[str, Any]:
     """
-    Calls the Mistral grading server /grade endpoint defined in server.py on WORK PC.
+    Call the Mistral grading FastAPI on the work PC.
 
-    server.py expects:
-      - Header: x-api-token: <MISTRAL_API_TOKEN>
-      - JSON body: {question, student_answer, context, max_marks}
-
-    and returns:
-      {
-        "marks_awarded": number,
-        "feedback": "...",
-        "raw": "full generated text"
-      }
+    Expected response from /grade (based on your curl):
+      { "response": "<big text with embedded JSON>" }
     """
-    headers = {
-        "x-api-token": MISTRAL_API_TOKEN,
-        "Content-Type": "application/json",
-    }
-
     payload = {
         "question": question,
         "student_answer": student_answer,
@@ -186,75 +202,70 @@ def get_mistral_response(
         "max_marks": max_marks,
     }
 
-    try:
-        resp = requests.post(MISTRAL_SERVER_URL, headers=headers, json=payload, timeout=120)
-        resp.raise_for_status()
-        return resp.json()
-    except requests.exceptions.RequestException as e:
-        print(f"[model.py] Error communicating with Mistral grading server: {e}")
-        return {
-            "error": str(e),
-            "llm_error": True,
-        }
+    headers = {
+        "Content-Type": "application/json",
+        "x-api-token": MISTRAL_API_TOKEN,
+    }
 
-# ============================================================
-# 5. Main entry point used by app.py
-# ============================================================
+    try:
+        resp = requests.post(MISTRAL_SERVER_URL, json=payload, headers=headers, timeout=60)
+        resp.raise_for_status()
+        data = resp.json()  # e.g. {"response": "..."}
+    except Exception as e:
+        print("[model.py] Error communicating with Mistral grading server:", e)
+        return {"error": str(e), "llm_error": True}
+
+    # Case 1: already good JSON
+    if isinstance(data, dict) and "marks_awarded" in data and "feedback" in data:
+        return data
+
+    # Case 2: has "response" with our embedded JSON
+    if isinstance(data, dict) and isinstance(data.get("response"), str):
+        parsed = extract_json_block_from_response_text(data["response"])
+        print("[model.py] Parsed grader JSON:", parsed)
+        return parsed
+
+    # Unknown format
+    return {"error": f"Unexpected grader response format: {data}", "llm_error": True}
+
+# ---------------------------------------------------------------------
+# MAIN ENTRY: grade_answer (used by app.py /evaluate)
+# ---------------------------------------------------------------------
 
 def grade_answer(question: str, student_answer: str, max_marks: float) -> Dict[str, Any]:
     """
-    Main entry point used by app.py
+    Main function used by FastAPI /evaluate endpoint.
 
-    app.py does:
-      result = await anyio.to_thread.run_sync(
-          grade_answer,
-          payload.question,
-          payload.student_answer,
-          payload.max_marks,
-      )
-
-    This function:
-      1. Uses RAG to retrieve relevant context from the local index.
-      2. Calls the remote Mistral grading server (/grade) on the WORK PC.
-      3. Normalizes the response into:
-         {
-           "score": ...,
-           "max_score": ...,
-           "feedback": "...",
-           "raw": <original server response>
-         }
+    1) Retrieve context using RAG.
+    2) Call remote Mistral grader.
+    3) Normalize into {score, max_score, feedback, raw}.
     """
+    # 1. Retrieve context based on question
+    context_chunks = find_most_similar_chunks(question, top_k=3)
+    context_text = "\n---\n".join(c["text"] for c in context_chunks)
 
-    # 1. Build retrieval query (simple combo, tweak if you want)
-    retrieval_query = f"{question}\n{student_answer}"
-
-    # 2. Get top-k context chunks
-    context_chunks = find_most_similar_chunks(retrieval_query, top_k=3)
-    context_text = "\n---\n".join([c["text"] for c in context_chunks])
-
-    # 3. Call remote grading server
-    grader_response = get_mistral_response(
+    # 2. Call the Mistral grading server
+    grader_resp = call_mistral_grader(
         question=question,
         student_answer=student_answer,
         context=context_text,
         max_marks=max_marks,
     )
 
-    # If the request failed, bubble up the error so FastAPI can handle it
-    if grader_response.get("llm_error"):
-        return grader_response
+    # If explicit error from grader, propagate
+    if "error" in grader_resp and grader_resp.get("llm_error"):
+        print("[model.py] Grader returned llm_error:", grader_resp)
+        return grader_resp
 
-    # server.py returns: {"marks_awarded": ..., "feedback": ..., "raw": ...}
-    marks_awarded = grader_response.get("marks_awarded")
-    feedback = grader_response.get("feedback", "")
-
-    score = float(marks_awarded) if marks_awarded is not None else None
+    marks_awarded = grader_resp.get("marks_awarded")
+    feedback = grader_resp.get("feedback", "")
 
     result: Dict[str, Any] = {
-        "score": score,
+        "score": float(marks_awarded) if marks_awarded is not None else None,
         "max_score": float(max_marks),
         "feedback": feedback,
-        "raw": grader_response,
+        "raw": grader_resp,
     }
 
+    print("[model.py] grade_answer result:", result)
     return result

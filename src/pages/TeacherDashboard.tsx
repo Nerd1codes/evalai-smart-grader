@@ -336,53 +336,51 @@ const TeacherDashboard: React.FC = () => {
 
   // 🔥 NEW: call backend AI evaluation after answers are saved
   const evaluateStudentWithAI = async (
-  examId: string,
-  studentId: string,
-  studentName: string
-) => {
-  try {
-    console.log(
-      `🤖 Triggering AI evaluation for ${studentName} (studentId=${studentId}) in examId=${examId}`
-    );
+    examId: string,
+    studentId: string,
+    studentName: string
+  ) => {
+    try {
+      console.log(
+        `🤖 Triggering AI evaluation for ${studentName} (studentId=${studentId}) in examId=${examId}`
+      );
 
-    const data = await api.evaluateStudentAnswers(examId, studentId);
-    console.log("🤖 AI evaluation response:", data);
+      const data = await api.evaluateStudentAnswers(examId, studentId);
+      console.log("🤖 AI evaluation response:", data);
 
-    const evaluatedCount = Array.isArray(data?.results)
-      ? data.results.length
-      : data?.evaluatedCount ?? 0;
+      const evaluatedCount = Array.isArray(data?.results)
+        ? data.results.length
+        : data?.evaluatedCount ?? 0;
 
-    if (typeof data?.totalScore === "number" && selectedSemester && selectedSection) {
-      setSemesters((prev) => {
-        const sem = prev[selectedSemester];
-        if (!sem) return prev;
-        const secStudents = sem.sections[selectedSection] || [];
-        const updatedStudents = secStudents.map((s) =>
-          s.id === studentId ? { ...s, marks: data.totalScore } : s
-        );
-        return {
-          ...prev,
-          [selectedSemester]: {
-            ...sem,
-            sections: {
-              ...sem.sections,
-              [selectedSection]: updatedStudents,
+      if (typeof data?.totalScore === "number" && selectedSemester && selectedSection) {
+        setSemesters((prev) => {
+          const sem = prev[selectedSemester];
+          if (!sem) return prev;
+          const secStudents = sem.sections[selectedSection] || [];
+          const updatedStudents = secStudents.map((s) =>
+            s.id === studentId ? { ...s, marks: data.totalScore } : s
+          );
+          return {
+            ...prev,
+            [selectedSemester]: {
+              ...sem,
+              sections: {
+                ...sem.sections,
+                [selectedSection]: updatedStudents,
+              },
             },
-          },
-        };
-      });
+          };
+        });
+      }
+
+      alert(
+        `AI evaluation completed for ${studentName}. Evaluated ${evaluatedCount} answer(s).`
+      );
+    } catch (err: any) {
+      console.error("❌ AI evaluation failed:", err);
+      alert(err?.message || "AI evaluation failed. Please check the evaluation service.");
     }
-
-    alert(
-      `AI evaluation completed for ${studentName}. Evaluated ${evaluatedCount} answer(s).`
-    );
-  } catch (err: any) {
-    console.error("❌ AI evaluation failed:", err);
-    alert(err?.message || "AI evaluation failed. Please check the evaluation service.");
-  }
-};
-
-
+  };
 
   const handleStudentFileSelect = async (
     event: React.ChangeEvent<HTMLInputElement>,
@@ -870,18 +868,19 @@ const TeacherDashboard: React.FC = () => {
       : "";
   const currentPapers = currentKey ? questionPapers[currentKey] || [] : [];
 
-  // ---------- Render ----------
+  // ---------- Conditional render for Student Details (AFTER helper is defined) ----------
   if (selectedStudent) {
     const activeExamId = getActiveExamIdForCurrentSection();
     return (
       <StudentDetailsPage
         student={selectedStudent}
-        examId={activeExamId}
+        examId={activeExamId || undefined}
         onBack={() => setSelectedStudent(null)}
       />
     );
   }
 
+  // ---------- Render main dashboard ----------
   return (
     <div className="min-h-screen bg-slate-50">
       <Header userName={userName || "Loading..."} />

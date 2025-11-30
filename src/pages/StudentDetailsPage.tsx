@@ -10,11 +10,11 @@ import {
 import {
   ArrowLeft,
   MessageSquare,
-  TrendingDown,
   TrendingUp,
   AlertCircle,
   CheckCircle,
 } from "lucide-react";
+import { api } from "@/controllers/apiService";
 
 // If you already have a Student type in "@/types", you can import it instead.
 export interface Student {
@@ -34,14 +34,16 @@ interface AnswerRecord {
   answerText: string;
   maxMarks: number;
   aiScore?: number | null;
+  aiMaxScore?: number | null;
   aiFeedback?: string;
   teacherScore?: number | null;
+  teacherComment?: string;
   status?: string;
 }
 
 interface StudentDetailsPageProps {
   student: Student;
-  examId: string | null; // 👈 which exam we are looking at
+  examId: string | null;
   onBack: () => void;
 }
 
@@ -63,85 +65,121 @@ export const StudentDetailsPage = ({
   }>({});
 
   // ---------- Fetch student's answers + questions from backend ----------
-  useEffect(() => {
-    const loadAnswers = async () => {
-      if (!examId) {
-        setError("No exam selected for this student.");
-        setLoading(false);
-        return;
-      }
+  const loadAnswers = async () => {
+    if (!examId) {
+      setError("No exam selected for this student.");
+      setLoading(false);
+      return;
+    }
 
-      try {
-        setLoading(true);
-        setError(null);
+    try {
+      setLoading(true);
+      setError(null);
 
-        const res = await fetch(
-          `/api/exams/${examId}/students/${student.id}/answers`
-        );
-        const data = await res.json();
+      // 👇 Use centralized API service
+      const data = await api.getStudentAnswers(
+        examId,
+        String(student.id)
+      );
 
-        if (!res.ok) {
-          throw new Error(data?.message || "Failed to load answers.");
+      const fetchedAnswers: AnswerRecord[] = data.answers || [];
+
+      setAnswers(fetchedAnswers);
+
+      // Prefill teacherComments + questionMarks from existing data (if any)
+      const initialComments: { [key: string]: string } = {};
+      const initialMarks: { [key: string]: number } = {};
+
+      fetchedAnswers.forEach((a) => {
+        if (a.teacherComment) {
+          initialComments[a._id] = a.teacherComment;
         }
+        const effectiveMarks =
+          a.teacherScore ?? a.aiScore ?? 0;
+        initialMarks[a._id] = effectiveMarks;
+      });
 
-        const fetchedAnswers: AnswerRecord[] = data.answers || [];
-        setAnswers(fetchedAnswers);
-      } catch (err: any) {
-        console.error("Failed to load student answers:", err);
-        setError(err?.message || "Failed to load student answers.");
-      } finally {
-        setLoading(false);
-      }
-    };
+      setTeacherComments(initialComments);
+      setQuestionMarks(initialMarks);
+    } catch (err: any) {
+      console.error("Failed to load student answers:", err);
+      setError(err?.message || "Failed to load student answers.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     loadAnswers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [examId, student.id]);
 
   // ---------- Derived exam summary ----------
+  // Use teacherScore if present, otherwise fallback to aiScore
   const totalMarks =
-    answers.reduce(
-      (sum, a) => sum + (a.teacherScore ?? a.aiScore ?? 0),
-      0
-    ) || 0;
+    answers.reduce((sum, a) => {
+      const effective = a.teacherScore ?? a.aiScore ?? 0;
+      return sum + effective;
+    }, 0) || 0;
 
   const maxMarks =
-    answers.reduce((sum, a) => sum + (a.maxMarks ?? 0), 0) || 1; // avoid /0
+    answers.reduce((sum, a) => sum + (a.maxMarks ?? 0), 0) || 1;
 
   const percentage = ((totalMarks / maxMarks) * 100).toFixed(1);
-
-  const examName = "Exam Evaluation"; // You can later pass subject/exam name as a prop
+  const examName = "Exam Evaluation"; // Later you can pass subject/exam name as a prop
 
   // ---------- Handlers ----------
   const handleCommentChange = (answerId: string, value: string) => {
     setTeacherComments({ ...teacherComments, [answerId]: value });
   };
 
-  const handleSaveComment = (answerId: string) => {
-    console.log(
-      `Saved comment for answer ${answerId}:`,
-      teacherComments[answerId]
+  const handleSaveComment = async (answerId: string) => {
+    const comment = teacherComments[answerId] || "";
+
+    console.log(`Saved comment for answer ${answerId}:`, comment);
+
+    // TODO: when backend route exists, do something like:
+    // await api.updateAnswerTeacherComment(answerId, comment);
+
+    // For now, update local state so it appears as part of the answer
+    setAnswers((prev) =>
+      prev.map((a) =>
+        a._id === answerId ? { ...a, teacherComment: comment } : a
+      )
     );
-    // Later: POST/PATCH to backend to persist teacher comments
   };
 
   const handleEditQuestionMarks = (answer: AnswerRecord) => {
     const current =
-      questionMarks[answer._id] ?? answer.teacherScore ?? answer.aiScore ?? 0;
+      questionMarks[answer._id] ??
+      answer.teacherScore ??
+      answer.aiScore ??
+      0;
     setEditingQuestion(answer._id);
     setQuestionMarks({ ...questionMarks, [answer._id]: current });
   };
 
-  const handleSaveQuestionMarks = (answer: AnswerRecord) => {
+  const handleSaveQuestionMarks = async (answer: AnswerRecord) => {
     const newMarks =
-      questionMarks[answer._id] ?? answer.teacherScore ?? answer.aiScore ?? 0;
+      questionMarks[answer._id] ??
+      answer.teacherScore ??
+      answer.aiScore ??
+      0;
 
     console.log(
       `Saved marks for answer ${answer._id} (Q${answer.questionNumber}):`,
       newMarks
     );
 
-    // Later: call backend to persist teacherScore override
-    // e.g. PATCH /answers/:id { teacherScore: newMarks }
+    // TODO: when backend route exists, do something like:
+    // await api.updateAnswerTeacherScore(answer._id, newMarks);
+
+    // Update local state so totals and UI refresh
+    setAnswers((prev) =>
+      prev.map((a) =>
+        a._id === answer._id ? { ...a, teacherScore: newMarks } : a
+      )
+    );
 
     setEditingQuestion(null);
   };
@@ -206,8 +244,16 @@ export const StudentDetailsPage = ({
               Back to Dashboard
             </Button>
             <div className="h-px flex-1 bg-slate-200" />
-            <div className="text-sm text-slate-600">
-              Student Performance Analysis
+            <div className="flex items-center gap-3 text-sm text-slate-600">
+              <span>Student Performance Analysis</span>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 px-3 text-xs"
+                onClick={loadAnswers}
+              >
+                Refresh
+              </Button>
             </div>
           </div>
         </div>
@@ -235,7 +281,9 @@ export const StudentDetailsPage = ({
               </div>
             </div>
             <div className="text-right">
-              <div className="text-sm text-slate-300 mb-1">Overall Score</div>
+              <div className="text-sm text-slate-300 mb-1">
+                Overall Score (Teacher-adjusted)
+              </div>
               <div className="text-5xl font-bold">{totalMarks}</div>
               <div className="text-xl text-slate-300">/ {maxMarks}</div>
               <div
@@ -262,6 +310,9 @@ export const StudentDetailsPage = ({
 
           {answers.map((ans, index) => {
             const max = ans.maxMarks ?? 0;
+            const aiMarks = ans.aiScore ?? 0;
+            const teacherOverride = ans.teacherScore ?? null;
+
             const currentMarks =
               editingQuestion === ans._id
                 ? questionMarks[ans._id] ??
@@ -270,8 +321,7 @@ export const StudentDetailsPage = ({
                   0
                 : ans.teacherScore ?? ans.aiScore ?? 0;
 
-            const scorePercentage =
-              max > 0 ? (currentMarks / max) * 100 : 0;
+            const scorePercentage = max > 0 ? (currentMarks / max) * 100 : 0;
 
             return (
               <Card
@@ -321,7 +371,7 @@ export const StudentDetailsPage = ({
                           </div>
                         )}
                       </div>
-                      <div className="flex items-center gap-2 justify-end">
+                      <div className="flex flex-col items-end gap-1">
                         <div
                           className={`text-sm font-semibold ${
                             scorePercentage >= 80
@@ -335,10 +385,28 @@ export const StudentDetailsPage = ({
                         >
                           {scorePercentage.toFixed(0)}%
                         </div>
+
+                        {/* Show AI vs Teacher scoring info */}
+                        <div className="text-xs text-slate-500">
+                          AI Score:{" "}
+                          <span className="font-semibold">
+                            {aiMarks}/{max}
+                          </span>
+                          {teacherOverride !== null && (
+                            <>
+                              {"  •  "}
+                              Teacher Override:{" "}
+                              <span className="font-semibold">
+                                {teacherOverride}/{max}
+                              </span>
+                            </>
+                          )}
+                        </div>
+
                         {editingQuestion === ans._id ? (
                           <Button
                             size="sm"
-                            className="bg-slate-900 text-white hover:bg-slate-800 h-7"
+                            className="bg-slate-900 text-white hover:bg-slate-800 h-7 mt-1"
                             onClick={() => handleSaveQuestionMarks(ans)}
                           >
                             <CheckCircle className="h-3 w-3 mr-1" />
@@ -348,7 +416,7 @@ export const StudentDetailsPage = ({
                           <Button
                             size="sm"
                             variant="outline"
-                            className="text-slate-900 hover:bg-slate-100 h-7 text-xs"
+                            className="text-slate-900 hover:bg-slate-100 h-7 text-xs mt-1"
                             onClick={() => handleEditQuestionMarks(ans)}
                           >
                             Edit Marks

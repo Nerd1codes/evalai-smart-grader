@@ -50,6 +50,17 @@ export const api = {
 		);
 	},
 
+	// Get all answers for a given exam + student
+getStudentAnswers: async (examId: string, studentId: string) => {
+  return handleResponse(
+    await fetch(`${API_BASE}/exams/${examId}/students/${studentId}/answers`, {
+      method: "GET",
+      credentials: "include",
+    })
+  );
+},
+
+
 	/**
 	 * Adds a new section to a semester.
 	 */
