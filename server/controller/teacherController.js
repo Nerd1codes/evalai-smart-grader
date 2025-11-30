@@ -36,6 +36,36 @@ const sendAuthResponse = (res, teacher, message = "Success") => {
 };
 
 // 🧾 SIGNUP
+// export const signup = async (req, res) => {
+//   try {
+//     const { name, email, password } = req.body;
+
+//     if (!name || !email || !password) {
+//       return res
+//         .status(400)
+//         .json({ message: "Name, email, and password are required" });
+//     }
+
+//     const existingTeacher = await Teacher.findOne({ email });
+//     if (existingTeacher) {
+//       return res.status(400).json({ message: "Email already registered" });
+//     }
+
+//     // No hashing here — password is hashed inside the Teacher model
+//     const newTeacher = await Teacher.create({
+//       name,
+//       email,
+//       password,
+//     });
+
+//     // Auto-login after signup
+//     return sendAuthResponse(res, newTeacher, "Signup successful");
+//   } catch (error) {
+//     console.error("Signup error:", error);
+//     res.status(500).json({ message: error.message || "Server error" });
+//   }
+// };
+
 export const signup = async (req, res) => {
   try {
     const { name, email, password } = req.body;
@@ -51,23 +81,20 @@ export const signup = async (req, res) => {
       return res.status(400).json({ message: "Email already registered" });
     }
 
-    // Explicitly hash the password here
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-
+    // DO NOT hash here — handled in model middleware
     const newTeacher = await Teacher.create({
       name,
       email,
-      password: hashedPassword,
+      password, // raw password sent, model will hash
     });
 
-    // Auto-login after signup
     return sendAuthResponse(res, newTeacher, "Signup successful");
   } catch (error) {
     console.error("Signup error:", error);
     res.status(500).json({ message: error.message || "Server error" });
   }
 };
+
 
 // 🔐 LOGIN
 export const login = async (req, res) => {

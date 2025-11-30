@@ -123,7 +123,7 @@ export const StudentDetailsPage = ({
     }, 0) || 0;
 
   const maxMarks =
-    answers.reduce((sum, a) => sum + (a.maxMarks ?? 0), 0) || 1;
+    answers.reduce((sum, a) => sum + (a.maxMarks ?? 0), 0) || 1; // avoid div by 0
 
   const percentage = ((totalMarks / maxMarks) * 100).toFixed(1);
   const examName = "Exam Evaluation"; // Later you can pass subject/exam name as a prop
